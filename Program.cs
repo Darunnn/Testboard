@@ -3,20 +3,17 @@ using System.IO.Ports;
 
 Console.WriteLine("=== Locker Test ===");
 
-// ── DEBUG ──────────────────────────────────────────
 Console.WriteLine("[DEBUG] Config path : " + LockerConfig.Instance.ConfigPath);
 Console.WriteLine("[DEBUG] Port จาก ini: " + LockerConfig.Instance.Port);
 Console.WriteLine("[DEBUG] MaxChannels  : " + LockerConfig.Instance.MaxChannels);
 
 string[] ports = SerialPort.GetPortNames();
 Console.WriteLine("[DEBUG] Ports ในเครื่อง: " + string.Join(", ", ports));
-// ───────────────────────────────────────────────────
 
-// อ่านค่าจาก .ini ทั้งหมด
 string port = LockerConfig.Instance.Port;
 byte BOARD = LockerConfig.Instance.BoardAddr;
 int MAX_CH = LockerConfig.Instance.MaxChannels;
-const int STATUS_LEN = 11;   // 80 [board] S1..S7 33 [BCC] = 11 bytes
+const int STATUS_LEN = 11;
 
 bool connected = LockerCommands.CmdConnectPort(port);
 Console.WriteLine(connected ? $"✓ Connected ({port})" : $"✗ Failed — เช็ค COM port และสาย RS-485 ({port})");
@@ -29,12 +26,54 @@ while (true)
     Console.WriteLine($"  1 = Unlock ช่อง (1-{MAX_CH})");
     Console.WriteLine($"  2 = Check สถานะช่องเดียว (1-{MAX_CH})");
     Console.WriteLine($"  3 = Read All Status (CH 1-{MAX_CH})");
+    Console.WriteLine($"  4 = Debug Raw — ดู raw bytes ทั้งล็อคและไม่ล็อค");
     Console.WriteLine("  0 = ออก");
     Console.Write("เลือก: ");
 
     string? cmd = Console.ReadLine();
     if (cmd == "0") break;
 
+    // ─────────────────────────────────────────────────────────
+    // CMD 4 — Debug Raw: กด Enter ค้างไว้แล้วเปลี่ยนสถานะล็อค
+    // ดูว่า raw bytes เปลี่ยนไหมเมื่อล็อค/ไม่ล็อค
+    // ─────────────────────────────────────────────────────────
+    if (cmd == "4")
+    {
+        Console.Write($"Channel (1-{MAX_CH}): ");
+        string? chInput = Console.ReadLine();
+        if (!byte.TryParse(chInput, out byte ch) || ch < 1 || ch > MAX_CH)
+        {
+            Console.WriteLine($"✗ Channel ไม่ถูกต้อง (1-{MAX_CH})");
+            continue;
+        }
+
+        Console.WriteLine($"\n[DEBUG MODE] CH {ch} — กด Enter เพื่อ query ซ้ำ, กด Q แล้ว Enter เพื่อออก");
+        Console.WriteLine("ลองล็อคและไม่ล็อคสลับกัน แล้วดูว่า raw bytes เปลี่ยนไหม\n");
+
+        while (true)
+        {
+            string rawHex = LockerCommands.ReadRawHex(BOARD, ch);
+            byte rawByte3 = 0xFF;
+
+            try { rawByte3 = LockerCommands.CmdCheckLockedRaw(BOARD, ch); }
+            catch { }
+
+            string status = rawByte3 == 0x11 ? "🔒 Locked (0x11)"
+                          : rawByte3 == 0x00 ? "🔓 Unlocked (0x00)"
+                          : $"❓ Unknown (0x{rawByte3:X2})";
+
+            Console.WriteLine($"  Raw: [{rawHex}]  →  Byte[3] = 0x{rawByte3:X2}  →  {status}");
+
+            Console.Write("  Enter=query อีกครั้ง, Q=ออก: ");
+            string? k = Console.ReadLine();
+            if (k?.Trim().ToUpper() == "Q") break;
+        }
+        continue;
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // CMD 3 — Read All Status
+    // ─────────────────────────────────────────────────────────
     if (cmd == "3")
     {
         byte[]? response = LockerCommands.ReadAllStatus(BOARD);
@@ -53,6 +92,12 @@ while (true)
         Console.Write("[DEBUG] Raw S1-S7: ");
         for (int b = 0; b < 7; b++) Console.Write($"0x{s[b]:X2} ");
         Console.WriteLine();
+
+        // ตรวจว่ามี feedback wiring หรือเปล่า
+        bool allFF = s.Take(7).All(b => b == 0xFF);
+        if (allFF)
+            Console.WriteLine("⚠ ได้ 0xFF ทุก byte — อาจไม่ได้ต่อสาย Feedback (pin 6/7)");
+
         Console.WriteLine("─────────────────────────────────────────");
 
         for (int byteIdx = 0; byteIdx < 6; byteIdx++)
@@ -65,7 +110,6 @@ while (true)
                 Console.WriteLine($"  CH {ch:D2} → {(open ? "🔓 เปิดอยู่" : "🔒 ปิด")}");
             }
         }
-        // CH 49–50
         for (int bit = 0; bit < 2; bit++)
         {
             int ch = 49 + bit;
@@ -95,8 +139,19 @@ while (true)
         else
         {
             Console.WriteLine($"\nChecking CH {ch}...");
-            bool locked = LockerCommands.CmdCheckLocked(BOARD, ch);
+
+            // แสดง raw bytes ด้วยทุกครั้ง
+            string rawHex = LockerCommands.ReadRawHex(BOARD, ch);
+            Console.WriteLine($"[DEBUG] Raw bytes: [{rawHex}]");
+
+            byte rawByte3 = LockerCommands.CmdCheckLockedRaw(BOARD, ch);
+            Console.WriteLine($"[DEBUG] Byte[3] = 0x{rawByte3:X2}  (0x11=Locked, 0x00=Unlocked)");
+
+            bool locked = rawByte3 == 0x00;
             Console.WriteLine(locked ? "🔒 Locked (ปิดอยู่)" : "🔓 Unlocked (เปิดอยู่)");
+
+            if (rawByte3 != 0x00 && rawByte3 != 0x11)
+                Console.WriteLine($"⚠ Byte[3] = 0x{rawByte3:X2} — ไม่ใช่ค่ามาตรฐาน ตรวจสอบสาย feedback");
         }
     }
     else
