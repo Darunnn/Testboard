@@ -120,7 +120,8 @@ while (true)
                 int ch = byteIdx * 8 + bit + 1;
                 if (ch > MAX_CH) break;
                 // bit=0 → Open, bit=1 → Closed
-                bool closed = (s[byteIdx] >> bit & 1) == 1;
+                int reversedBit = 7 - bit;
+                bool closed = (s[byteIdx] >> reversedBit & 1) == 1;
                 Console.WriteLine($"  CH {ch:D2} → {(closed ? "Locked (ปิด)" : "Unlocked (เปิด)")}");
             }
         }
