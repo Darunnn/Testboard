@@ -29,9 +29,8 @@ while (true)
     Console.WriteLine($"  1 = Unlock ช่องเดียว (1-{MAX_CH})");
     Console.WriteLine($"  2 = Check สถานะช่องเดียว (1-{MAX_CH})");
     Console.WriteLine($"  3 = Read All Status (CH 1-{MAX_CH})");
-    Console.WriteLine($"  4 = Debug Raw");
-    Console.WriteLine($"  5 = Unlock ALL ({MAX_CH} ช่องพร้อมกัน)");
-    Console.WriteLine($"  6 = Unlock หลายช่อง (ระบุเอง)");
+    Console.WriteLine($"  4 = Unlock ALL ({MAX_CH} ช่องพร้อมกัน)");
+    Console.WriteLine($"  5 = Unlock หลายช่อง (ระบุเอง)");
     Console.WriteLine("  0 = ออก");
     Console.Write("เลือก: ");
 
@@ -39,9 +38,9 @@ while (true)
     if (cmd == "0") break;
 
     // ─────────────────────────────────────────────────────────
-    // CMD 5 — Unlock ALL channels พร้อมกัน
+    // CMD 4 — Unlock ALL channels พร้อมกัน
     // ─────────────────────────────────────────────────────────
-    if (cmd == "5")
+    if (cmd == "4")
     {
         Console.WriteLine($"\nUnlocking ALL {MAX_CH} channels...");
         string result = LockerCommands.CmdUnlockAll(BOARD);
@@ -52,9 +51,9 @@ while (true)
     }
 
     // ─────────────────────────────────────────────────────────
-    // CMD 6 — Unlock หลายช่องที่ระบุ
+    // CMD5 — Unlock หลายช่องที่ระบุ
     // ─────────────────────────────────────────────────────────
-    if (cmd == "6")
+    if (cmd == "5")
     {
         Console.Write($"ระบุ channel (คั่นด้วย comma เช่น 1,3,5): ");
         string? input = Console.ReadLine();
@@ -78,38 +77,6 @@ while (true)
         Console.WriteLine(result == "ok"
             ? "ok — Unlock สำเร็จ"
             : $"Error: {result}");
-        continue;
-    }
-
-    // ─────────────────────────────────────────────────────────
-    // CMD 4 — Debug Raw: loop query จนกด Q
-    // ─────────────────────────────────────────────────────────
-    if (cmd == "4")
-    {
-        Console.Write($"Channel (1-{MAX_CH}): ");
-        string? chInput = Console.ReadLine();
-        if (!byte.TryParse(chInput, out byte ch) || ch < 1 || ch > MAX_CH)
-        {
-            Console.WriteLine($"Channel ไม่ถูกต้อง (1-{MAX_CH})");
-            continue;
-        }
-
-        Console.WriteLine($"\n[DEBUG MODE] CH {ch} — Enter=query อีกครั้ง, Q=ออก");
-        while (true)
-        {
-            string rawHex = LockerCommands.ReadRawHex(BOARD, ch);
-            byte rawByte3 = 0xFF;
-            try { rawByte3 = LockerCommands.CmdCheckLockedRaw(BOARD, ch); } catch { }
-
-            string status = rawByte3 == 0x11 ? "Locked (0x11)"
-                          : rawByte3 == 0x00 ? "Unlocked (0x00)"
-                          : $"Unknown (0x{rawByte3:X2})";
-
-            Console.WriteLine($"  Raw: [{rawHex}]  Byte[3]=0x{rawByte3:X2}  {status}");
-            Console.Write("  Enter=again, Q=exit: ");
-            string? k = Console.ReadLine();
-            if (k?.Trim().ToUpper() == "Q") break;
-        }
         continue;
     }
 
