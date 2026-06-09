@@ -82,58 +82,39 @@ while (true)
 
     // ─────────────────────────────────────────────────────────
     // CMD 3 — Read All Status
-    // Send: 80 [board] 00 33 [BCC]
-    // Reply: 80 [board] S1..S7 33 [BCC] = 11 bytes
-    //   bit=0 → Open (เปิด), bit=1 → Closed (ปิด)
     // ─────────────────────────────────────────────────────────
     if (cmd == "3")
     {
         byte[]? response = LockerCommands.ReadAllStatus(BOARD);
-
         if (response == null || response.Length < READ_ALL_LEN)
         {
             Console.WriteLine($"ไม่มีการตอบกลับ (ได้ {response?.Length ?? 0} bytes, ต้องการ {READ_ALL_LEN})");
             continue;
         }
-
         // S1–S7 อยู่ที่ index 2–8
         byte[] s = new byte[7];
         for (int b = 0; b < 7; b++)
             s[b] = response[2 + b];
-
         Console.WriteLine($"\nBoard {BOARD} — สถานะทุกช่อง (CH 1–{MAX_CH})");
         Console.Write("[DEBUG] Raw S1-S7: ");
         for (int b = 0; b < 7; b++) Console.Write($"0x{s[b]:X2} ");
         Console.WriteLine();
-
         bool allFF = s.Take(7).All(b => b == 0xFF);
         if (allFF)
             Console.WriteLine("Warning: ได้ 0xFF ทุก byte — อาจไม่ได้ต่อสาย Feedback");
-
         Console.WriteLine("─────────────────────────────────────────");
 
-        // CH 1–48 (S1–S6)
-        for (int byteIdx = 0; byteIdx < 6; byteIdx++)
+        // board ใช้ reverse byte order + LSB first
+        // S7=CH1-8, S6=CH9-16, S5=CH17-24, S4=CH25-32
+        // S3=CH33-40, S2=CH41-48, S1=CH49-50
+        for (int ch = 1; ch <= MAX_CH; ch++)
         {
-            for (int bit = 0; bit < 8; bit++)
-            {
-                int ch = byteIdx * 8 + bit + 1;
-                if (ch > MAX_CH) break;
-                // bit=0 → Open, bit=1 → Closed
-                int reversedBit = 7 - bit;
-                bool closed = (s[byteIdx] >> reversedBit & 1) == 1;
-                Console.WriteLine($"  CH {ch:D2} → {(closed ? "Locked (ปิด)" : "Unlocked (เปิด)")}");
-            }
-        }
-
-        // CH 49–50 (S7 bit 0,1)
-        for (int bit = 0; bit < 2; bit++)
-        {
-            int ch = 49 + bit;
-            if (ch > MAX_CH) break;
-            bool closed = (s[6] >> bit & 1) == 1;
+            int byteIdx = 6 - (ch - 1) / 8;
+            int bit = (ch - 1) % 8;
+            bool closed = (s[byteIdx] >> bit & 1) == 1;
             Console.WriteLine($"  CH {ch:D2} → {(closed ? "Locked (ปิด)" : "Unlocked (เปิด)")}");
         }
+
         Console.WriteLine("─────────────────────────────────────────");
         continue;
     }
