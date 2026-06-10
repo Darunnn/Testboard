@@ -6,13 +6,36 @@ Console.WriteLine("=== Locker Test ===");
 
 Console.WriteLine("[DEBUG] Config path : " + LockerConfig.Instance.ConfigPath);
 Console.WriteLine("[DEBUG] Mode        : " + LockerConfig.Instance.Mode);
-Console.WriteLine("[DEBUG] Port จาก ini: " + LockerConfig.Instance.Port);
 Console.WriteLine("[DEBUG] Channels    : " + string.Join(", ", LockerConfig.Instance.Channels));
 
-string[] ports = SerialPort.GetPortNames();
-Console.WriteLine("[DEBUG] Ports ในเครื่อง: " + string.Join(", ", ports));
+// ── Step 1: เช็คว่ามี RS-485 driver ติดตั้งอยู่ไหม ──
+string[] allDriverPorts = SerialPort.GetPortNames();
+if (allDriverPorts.Length == 0)
+{
+    Console.WriteLine("\nไม่พบ driver COM port ในเครื่องเลย");
+    Console.WriteLine("→ ติดตั้ง driver USB-to-RS485 adapter ก่อน แล้วรันใหม่");
+    Console.ReadKey();
+    return;
+}
 
-string port = LockerConfig.Instance.Port;
+// ── Step 2: แสดง port ที่พบให้เลือก ──
+Console.WriteLine($"\nพบ {allDriverPorts.Length} port:");
+for (int i = 0; i < allDriverPorts.Length; i++)
+    Console.WriteLine($"  {i + 1} = {allDriverPorts[i]}");
+
+Console.Write($"\nกด Enter เพื่อเลือก {allDriverPorts[0]} หรือพิมพ์หมายเลข/ชื่อ port: ");
+string? portInput = Console.ReadLine()?.Trim();
+
+string port;
+if (string.IsNullOrWhiteSpace(portInput))
+    port = allDriverPorts[0];
+else if (int.TryParse(portInput, out int idx) && idx >= 1 && idx <= allDriverPorts.Length)
+    port = allDriverPorts[idx - 1];
+else
+    port = portInput;
+
+Console.WriteLine($"ใช้ port: {port}");
+
 byte BOARD = LockerConfig.Instance.BoardAddr;
 IReadOnlyList<int> CHANNELS = LockerConfig.Instance.Channels;
 int MAX_CH = CHANNELS.Count;
@@ -64,7 +87,7 @@ while (true)
             .Select(s => s.Trim())
             .Where(s => int.TryParse(s, out _))
             .Select(int.Parse)
-            .Where(n => CHANNELS.Contains(n))   // เช็คเฉพาะ CH ที่เครื่องนี้ควบคุม
+            .Where(n => CHANNELS.Contains(n))
             .Distinct()
             .ToArray() ?? Array.Empty<int>();
 
@@ -86,7 +109,6 @@ while (true)
     // ─────────────────────────────────────────────────────────
     // CMD 3 — Read All Status
     // ─────────────────────────────────────────────────────────
-    
     if (cmd == "3")
     {
         byte[]? response = LockerCommands.ReadAllStatus(BOARD);
@@ -96,12 +118,10 @@ while (true)
             continue;
         }
 
-        // Debug raw
         Console.Write("[DEBUG] Raw S1-S7: ");
         for (int b = 2; b <= 8; b++) Console.Write($"0x{response[b]:X2} ");
         Console.WriteLine();
 
-        // ใช้ ParseAllStatusOwned — กรองเฉพาะ CH ของเครื่องนี้อัตโนมัติ
         var statusMap = LockerCommands.ParseAllStatusOwned(response);
 
         Console.WriteLine($"\nBoard {BOARD} — สถานะเฉพาะ CH ที่เครื่องนี้ควบคุม (Mode={LockerConfig.Instance.Mode})");
