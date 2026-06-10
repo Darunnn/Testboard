@@ -86,6 +86,7 @@ while (true)
     // ─────────────────────────────────────────────────────────
     // CMD 3 — Read All Status
     // ─────────────────────────────────────────────────────────
+    
     if (cmd == "3")
     {
         byte[]? response = LockerCommands.ReadAllStatus(BOARD);
@@ -94,27 +95,19 @@ while (true)
             Console.WriteLine($"ไม่มีการตอบกลับ (ได้ {response?.Length ?? 0} bytes, ต้องการ {READ_ALL_LEN})");
             continue;
         }
-        byte[] s = new byte[7];
-        for (int b = 0; b < 7; b++)
-            s[b] = response[2 + b];
 
-        Console.WriteLine($"\nBoard {BOARD} — สถานะเฉพาะ CH ที่เครื่องนี้ควบคุม");
+        // Debug raw
         Console.Write("[DEBUG] Raw S1-S7: ");
-        for (int b = 0; b < 7; b++) Console.Write($"0x{s[b]:X2} ");
+        for (int b = 2; b <= 8; b++) Console.Write($"0x{response[b]:X2} ");
         Console.WriteLine();
 
-        bool allFF = s.Take(7).All(b => b == 0xFF);
-        if (allFF)
-            Console.WriteLine("Warning: ได้ 0xFF ทุก byte — อาจไม่ได้ต่อสาย Feedback");
+        // ใช้ ParseAllStatusOwned — กรองเฉพาะ CH ของเครื่องนี้อัตโนมัติ
+        var statusMap = LockerCommands.ParseAllStatusOwned(response);
 
+        Console.WriteLine($"\nBoard {BOARD} — สถานะเฉพาะ CH ที่เครื่องนี้ควบคุม (Mode={LockerConfig.Instance.Mode})");
         Console.WriteLine("─────────────────────────────────────────");
-        foreach (int ch in CHANNELS)   // วน loop เฉพาะ CH ที่เครื่องนี้ดูแล
-        {
-            int byteIdx = 6 - (ch - 1) / 8;
-            int bit = (ch - 1) % 8;
-            bool closed = (s[byteIdx] >> bit & 1) == 1;
-            Console.WriteLine($"  CH {ch:D2} → {(closed ? "Locked (ปิด)" : "Unlocked (เปิด)")}");
-        }
+        foreach (var (ch, locked) in statusMap.OrderBy(x => x.Key))
+            Console.WriteLine($"  CH {ch:D2} → {(locked ? "Locked (ปิด)" : "Unlocked (เปิด)")}");
         Console.WriteLine("─────────────────────────────────────────");
         continue;
     }
